@@ -58,9 +58,8 @@
     var out = { id: id, active: false, pct: 0, streak: 0, day: 0, week: 0, checkedIn: false };
     var tracked = (profile && profile.concerns && profile.concerns.length) ? profile.concerns : (profile ? [profile.concern] : []);
     if (!profile || tracked.indexOf(id) < 0 || !U) return out;
-    var cons = U.getConsistency(profile.checkins || [], profile.startDate, profile.paused);
     out.active = true;
-    out.pct = cons.pct;
+    out.pct = U.getMonthProgress ? U.getMonthProgress(profile.checkins || []) : U.getConsistency(profile.checkins || [], profile.startDate, profile.paused).pct;
     out.streak = U.getStreak(profile.checkins || [], profile.paused);
     out.day = Math.max(1, U.daysBetween(profile.startDate, U.getToday()) + 1);
     out.week = U.getWeekNumber(profile.startDate);
@@ -87,6 +86,13 @@
     return getRegion(id).label;
   }
 
+  // Small months still show movement: 0.9% reads as "1%", never "0%".
+  function fmtPct(p) {
+    var v = p * 100;
+    if (v > 0 && v < 1) return '1%';
+    return Math.round(v) + '%';
+  }
+
   var RING_R = 12;
   var RING_C = 2 * Math.PI * RING_R;
 
@@ -96,7 +102,7 @@
     var dash = (RING_C * st.pct).toFixed(2);
     var attrs = interactive
       ? ' role="button" tabindex="0" data-region="' + region.id + '" aria-label="' +
-        esc(labelFor(region.id)) + (st.active ? ', tracking, ' + Math.round(st.pct * 100) + ' percent consistent' : ', not tracking') + '"'
+        esc(labelFor(region.id)) + (st.active ? ', tracking, ' + fmtPct(st.pct) + ' of this month done' : ', not tracking') + '"'
       : ' aria-hidden="true"';
     return '<g class="' + cls + '" transform="translate(' + x + ' ' + y + ')"' + attrs + '>' +
       '<circle class="bm-pin-hit" r="20"/>' +
@@ -137,7 +143,7 @@
         '" data-region="' + r.id + '">' +
         '<span class="bm-legend-dot"></span>' +
         '<span class="bm-legend-label">' + esc(labelFor(r.id)) + '</span>' +
-        '<span class="bm-legend-meta">' + (st.active ? Math.round(st.pct * 100) + '% this month' : 'Not tracking') + '</span>' +
+        '<span class="bm-legend-meta">' + (st.active ? fmtPct(st.pct) + ' of this month' : 'Not tracking') + '</span>' +
       '</button></li>';
     });
 
@@ -146,7 +152,7 @@
         '<div class="bm-copy">' +
           '<div class="bm-eyebrow">YOUR BODY MAP</div>' +
           '<h2 class="bm-title">Tap a part of the body to step into it.</h2>' +
-          '<p class="bm-sub">The ring on a region shows how consistent you have been over the last 28 days.</p>' +
+          '<p class="bm-sub">The ring on a region fills as you complete your daily ritual. Each fully logged day adds about 4% of the month; partial days add their share.</p>' +
           '<ul class="bm-legend">' + legend + '</ul>' +
         '</div>' +
         '<div class="bm-figure-card" id="bm-figure-card">' +
@@ -177,7 +183,7 @@
     var cfg = (root.Utils && root.Utils.getConcernConfig) ? root.Utils.getConcernConfig(id) : {};
     var label = labelFor(id);
     if (st.active) {
-      var pct = Math.round(st.pct * 100);
+      var pct = fmtPct(st.pct).replace('%', '');
       return '<div class="bm-clean-card" role="document">' +
         '<div class="bm-eyebrow">' + esc(label.toUpperCase()) + '</div>' +
         '<div class="bm-big-ring" aria-hidden="true">' +
@@ -258,8 +264,7 @@
     stage._trigger = opts.trigger || null;
     stage.innerHTML =
       figureSVG('bm-zoom-svg', profile, false, id) +
-      '<div class="bm-clean" aria-live="polite">' + cleanScreenHTML(profile, id) + '</div>' +
-      '<button type="button" class="bm-skip" data-bm-skip>Skip</button>';
+      '<div class="bm-clean" aria-live="polite">' + cleanScreenHTML(profile, id) + '</div>';
     doc.body.appendChild(stage);
     doc.body.classList.add('bm-open');
     stageEl = stage;

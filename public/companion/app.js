@@ -159,6 +159,20 @@ var Utils = {
     return { done: done, total: denom, rest: rest, pct: Math.min(1, done / denom) };
   },
 
+  // Share of a 28-day month completed, counting partial days by their percent.
+  // One full day = 1/28 (about 4%); a 50% day adds half of that.
+  getMonthProgress: function (checkins) {
+    var today = this.getToday();
+    var byDate = {};
+    (checkins || []).forEach(function (c) { if (!byDate[c.date] || c.done) byDate[c.date] = c; });
+    var sum = 0;
+    for (var i = 0; i < 28; i++) {
+      var c = byDate[this.addDays(today, -i)];
+      if (c && c.done) sum += (typeof c.pct === 'number' ? c.pct : 100) / 100;
+    }
+    return Math.min(1, sum / 28);
+  },
+
   getStreak: function (checkins, paused) {
     if (!checkins || !checkins.length) return 0;
     var self = this;
@@ -851,13 +865,20 @@ function renderDotGrid(profile) {
     var editable = daysSinceDate >= 0 && daysSinceDate <= 3 && date >= profile.startDate;
     var isFuture = date > today;
     var pctD = getDayPct(ci);
+    var pending = false;
+    if (!done && isToday && ci && ci.ritualDone && ci.ritualDone.length) {
+      var allIds = getRitualSteps(profile).map(function (s) { return s.id; });
+      var nTicked = allIds.filter(function (id) { return ci.ritualDone.indexOf(id) >= 0; }).length;
+      if (nTicked) { pctD = Math.round(nTicked / allIds.length * 100); pending = true; }
+    }
     var cls = 'dot';
     if (done) cls += pctD < 100 ? ' partial' : ' done';
+    else if (pending) cls += ' partial pending';
     if (isToday) cls += ' today';
     if (editable && !isFuture) cls += ' editable';
-    html += '<div class="' + cls + '"' + (done ? ' style="--pct:' + pctD + '%"' : '') +
-      (editable && !isFuture ? ' data-date="' + date + '" tabindex="0" role="button" aria-label="' + dayLabels[d] + ' ' + Utils.formatDate(date) + (done ? ' ' + pctD + ' percent done' : ' not done') + '"' : '') +
-      ' title="' + dayLabels[d] + (done ? ' · ' + pctD + '%' : '') + '">' + dayLabels[d] + '</div>';
+    html += '<div class="' + cls + '"' + ((done || pending) ? ' style="--pct:' + pctD + '%"' : '') +
+      (editable && !isFuture ? ' data-date="' + date + '" tabindex="0" role="button" aria-label="' + dayLabels[d] + ' ' + Utils.formatDate(date) + (done ? ' ' + pctD + ' percent done' : (pending ? ' ' + pctD + ' percent ticked, not submitted' : ' not done')) + '"' : '') +
+      ' title="' + dayLabels[d] + (done ? ' · ' + pctD + '%' : (pending ? ' · ' + pctD + '% ticked (submit to save)' : '')) + '">' + dayLabels[d] + '</div>';
   }
   html += '</div>';
 
@@ -1017,15 +1038,15 @@ function updateActiveNav(id) {
     if (target === id) {
       btn.classList.add('active');
       if (node) {
-        node.style.background = '#0B5E9E';
-        node.style.borderColor = '#0B5E9E';
+        node.style.background = 'var(--ob-pink)';
+        node.style.borderColor = 'var(--ob-pink)';
         node.style.transform = 'scale(1.25)';
       }
     } else {
       btn.classList.remove('active');
       if (node) {
-        node.style.background = '#FFFFFF';
-        node.style.borderColor = '#94A3B8';
+        node.style.background = 'var(--ob-glass)';
+        node.style.borderColor = 'var(--ob-hair)';
         node.style.transform = 'scale(1)';
       }
     }
@@ -1182,15 +1203,15 @@ function renderHeroSection(container) {
         '<p class="hero-subline">' + escHTML(c.subline || 'See real change, even when it is slow.') + '</p>' +
         '<div class="hero-benefits-grid">' +
           '<div class="benefit-pill">' +
-            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0B5E9E" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' +
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="stroke:var(--ob-pink)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' +
             '<span>' + escHTML(c.benefits[0]) + '</span>' +
           '</div>' +
           '<div class="benefit-pill">' +
-            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0B5E9E" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' +
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="stroke:var(--ob-pink)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' +
             '<span>' + escHTML(c.benefits[1]) + '</span>' +
           '</div>' +
           '<div class="benefit-pill">' +
-            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0B5E9E" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' +
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="stroke:var(--ob-pink)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' +
             '<span>' + escHTML(c.benefits[2]) + '</span>' +
           '</div>' +
         '</div>' +
@@ -1218,14 +1239,14 @@ function renderHeroSection(container) {
               '<svg class="journey-svg" viewBox="0 0 380 140" fill="none">' +
                 '<defs>' +
                   '<linearGradient id="heroCurveGrad" x1="0" y1="0" x2="0" y2="1">' +
-                    '<stop offset="0%" stop-color="#0B5E9E" stop-opacity="0.2"/>' +
-                    '<stop offset="100%" stop-color="#0B5E9E" stop-opacity="0.0"/>' +
+                    '<stop offset="0%" style="stop-color:var(--ob-pink)" stop-opacity="0.2"/>' +
+                    '<stop offset="100%" style="stop-color:var(--ob-pink)" stop-opacity="0.0"/>' +
                   '</linearGradient>' +
                 '</defs>' +
                 '<path d="M 20 110 C 100 105, 180 85, 260 55 C 300 40, 340 35, 360 30 L 360 135 L 20 135 Z" fill="url(#heroCurveGrad)"/>' +
-                '<path class="signature-line" d="M 20 110 C 100 105, 180 85, 260 55 C 300 40, 340 35, 360 30" stroke="#0B5E9E" stroke-width="4.5" stroke-linecap="round"/>' +
-                '<circle class="milestone-dot graph-interactive-dot active" data-node="1" cx="20" cy="110" r="7" fill="#0B5E9E"/>' +
-                '<circle class="milestone-dot graph-interactive-dot" data-node="4" cx="180" cy="85" r="7" fill="#0284c7"/>' +
+                '<path class="signature-line" d="M 20 110 C 100 105, 180 85, 260 55 C 300 40, 340 35, 360 30" style="stroke:var(--ob-pink)" stroke-width="4.5" stroke-linecap="round"/>' +
+                '<circle class="milestone-dot graph-interactive-dot active" data-node="1" cx="20" cy="110" r="7" style="fill:var(--ob-pink)"/>' +
+                '<circle class="milestone-dot graph-interactive-dot" data-node="4" cx="180" cy="85" r="7" style="fill:var(--ob-pink)"/>' +
                 '<circle class="milestone-dot graph-interactive-dot" data-node="12" cx="360" cy="30" r="8" fill="#F26B1D"/>' +
               '</svg>' +
               '<div class="journey-milestones-grid">' +
@@ -1324,21 +1345,21 @@ function renderHowSection(container) {
     var svgVisual = '';
     if (idx === 0) {
       svgVisual = '<svg width="64" height="64" viewBox="0 0 80 80" fill="none" style="margin-bottom:14px;">' +
-        '<circle cx="40" cy="40" r="34" stroke="#E6F2FC" stroke-width="6"/>' +
-        '<path d="M 18 52 C 28 50, 42 38, 62 24" stroke="#0B5E9E" stroke-width="4" stroke-linecap="round"/>' +
+        '<circle cx="40" cy="40" r="34" style="stroke:var(--ob-hair)" stroke-width="6"/>' +
+        '<path d="M 18 52 C 28 50, 42 38, 62 24" style="stroke:var(--ob-pink)" stroke-width="4" stroke-linecap="round"/>' +
         '<circle cx="62" cy="24" r="6" fill="#F26B1D"/>' +
         '</svg>';
     } else if (idx === 1) {
       svgVisual = '<svg width="64" height="64" viewBox="0 0 80 80" fill="none" style="margin-bottom:14px;">' +
-        '<circle cx="40" cy="40" r="32" stroke="#1c4ed8" stroke-width="5" stroke-linecap="round" stroke-dasharray="160" stroke-dashoffset="30"/>' +
-        '<circle cx="40" cy="40" r="22" stroke="#0284c7" stroke-width="5" stroke-linecap="round" stroke-dasharray="110" stroke-dashoffset="20"/>' +
-        '<circle cx="40" cy="40" r="12" stroke="#0d9488" stroke-width="5" stroke-linecap="round" stroke-dasharray="60" stroke-dashoffset="0"/>' +
+        '<circle cx="40" cy="40" r="32" style="stroke:var(--ob-pink)" stroke-width="5" stroke-linecap="round" stroke-dasharray="160" stroke-dashoffset="30"/>' +
+        '<circle cx="40" cy="40" r="22" style="stroke:var(--ob-pink)" stroke-width="5" stroke-linecap="round" stroke-dasharray="110" stroke-dashoffset="20"/>' +
+        '<circle cx="40" cy="40" r="12" style="stroke:var(--ob-pink)" stroke-width="5" stroke-linecap="round" stroke-dasharray="60" stroke-dashoffset="0"/>' +
         '</svg>';
     } else {
       svgVisual = '<svg width="64" height="64" viewBox="0 0 80 80" fill="none" style="margin-bottom:14px;">' +
-        '<rect x="10" y="16" width="60" height="48" rx="8" fill="#F0F6FC"/>' +
-        '<path d="M 14 54 C 28 50, 44 36, 66 26 L 66 38 C 44 48, 28 58, 14 60 Z" fill="#E6F2FC"/>' +
-        '<path d="M 14 56 C 28 52, 44 38, 66 28" stroke="#0B5E9E" stroke-width="3.5" stroke-linecap="round"/>' +
+        '<rect x="10" y="16" width="60" height="48" rx="8" style="fill:var(--ob-glass-hi)"/>' +
+        '<path d="M 14 54 C 28 50, 44 36, 66 26 L 66 38 C 44 48, 28 58, 14 60 Z" style="fill:var(--ob-glass-hi)"/>' +
+        '<path d="M 14 56 C 28 52, 44 38, 66 28" style="stroke:var(--ob-pink)" stroke-width="3.5" stroke-linecap="round"/>' +
         '<circle cx="44" cy="38" r="4" fill="#F26B1D"/>' +
         '</svg>';
     }
@@ -1369,21 +1390,21 @@ function renderSetupSection(container) {
       '<div class="section-header text-center">' +
         '<h2 class="section-title">Bathroom Shelf</h2>' +
         '<p class="section-subline">' + escHTML(getProfileConcerns(profile).map(function (c) { return Utils.getConcernConfig(c).label; }).join(' + ')) + ' routine · ' + pCount + ' active formula' + (pCount === 1 ? '' : 's') + '</p>' +
-        '<p class="official-shelf-sublink" style="font-size:0.88rem;color:#0B5E9E;margin-top:6px;">' +
-          'Need to refill or explore actives? <a href="https://bebodywise.com" target="_blank" rel="noopener" class="store-link-accent" style="color:#0B5E9E;font-weight:600;text-decoration:underline;">View full ingredients on Be Bodywise ↗</a>' +
+        '<p class="official-shelf-sublink" style="font-size:0.88rem;color:var(--ob-pink);margin-top:6px;">' +
+          'Need to refill or explore actives? <a href="https://bebodywise.com" target="_blank" rel="noopener" class="store-link-accent" style="color:var(--ob-pink);font-weight:600;text-decoration:underline;">View full ingredients on Be Bodywise ↗</a>' +
         '</p>' +
       '</div>' +
 
       '<div class="card" style="max-width:620px;margin:0 auto;padding:28px 24px;">' +
         '<div class="shelf-active-list" style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;">' +
           (profile.products || []).map(function (p) {
-            return '<div class="shelf-active-item" style="display:flex;align-items:center;gap:14px;padding:12px 16px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;">' +
-              '<div class="shelf-item-icon" style="width:36px;height:36px;border-radius:8px;background:#EBF4FC;display:flex;align-items:center;justify-content:center;color:#0B5E9E;flex-shrink:0;">' +
+            return '<div class="shelf-active-item" style="display:flex;align-items:center;gap:14px;padding:12px 16px;background:var(--ob-glass-hi);border:1px solid var(--ob-hair);border-radius:12px;">' +
+              '<div class="shelf-item-icon" style="width:36px;height:36px;border-radius:8px;background:var(--ob-glass-hi);display:flex;align-items:center;justify-content:center;color:var(--ob-pink);flex-shrink:0;">' +
                 '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>' +
               '</div>' +
               '<div class="shelf-item-details" style="flex:1;">' +
-                '<div class="shelf-item-name" style="font-weight:600;color:#0F172A;font-size:0.95rem;">' + escHTML(p.name || 'Bodywise formula') + '</div>' +
-                '<div class="shelf-item-meta" style="font-size:0.8rem;color:#64748B;">' + (p.frequency || 'Daily') + ' · Started ' + Utils.formatDate(p.openedOn || profile.startDate) + '</div>' +
+                '<div class="shelf-item-name" style="font-weight:600;color:var(--ob-head);font-size:0.95rem;">' + escHTML(p.name || 'Bodywise formula') + '</div>' +
+                '<div class="shelf-item-meta" style="font-size:0.8rem;color:var(--ob-body);">' + (p.frequency || 'Daily') + ' · Started ' + Utils.formatDate(p.openedOn || profile.startDate) + '</div>' +
               '</div>' +
             '</div>';
           }).join('') +
@@ -1504,7 +1525,7 @@ function renderDiscoveryCatalog(container) {
   });
 
   html += '</div>' +
-      '<div class="card text-center" style="padding:24px;background:#F0F7FF;border:1.5px solid #BFDBFE;">' +
+      '<div class="card text-center" style="padding:24px;background:var(--ob-glass-hi);border:1.5px solid var(--ob-hair);">' +
         '<h4 style="font-size:1.05rem;font-weight:700;color:var(--deep-navy);margin-bottom:6px;">Already placed an order?</h4>' +
         '<p class="card-text mb-14" style="font-size:0.9rem;">If your product is on the way, you can build your bathroom shelf now.</p>' +
         '<div style="display:flex;gap:12px;justify-content:center;">' +
@@ -1783,7 +1804,7 @@ function renderBathroomShelfSetup(container) {
         var badge = document.createElement('div');
         badge.className = 'guide-completion-badge';
         var badgeText = (CONTENT.guide && CONTENT.guide.routineReady) ? CONTENT.guide.routineReady.replace(/\n/g, ' ') : 'Your routine is ready.';
-        badge.innerHTML = '<div class="guide-avatar-circle" style="width:36px;height:36px;background:#fff;">' + ICONS.guideAvatar + '</div>' +
+        badge.innerHTML = '<div class="guide-avatar-circle" style="width:36px;height:36px;">' + ICONS.guideAvatar + '</div>' +
           '<span>' + escHTML(badgeText) + '</span>';
         cardEl.insertBefore(badge, cardEl.firstChild);
       }
@@ -1930,14 +1951,14 @@ function renderCheckinSection(container) {
   }
 
   var ringFull = isCheckedIn || isRest;
-  var ringColor = isRest && !isCheckedIn ? '#93C5FD' : '#0B5E9E';
+  var ringColor = isRest && !isCheckedIn ? 'var(--ob-soft)' : 'var(--ob-pink)';
   var ringInner;
   if (isCheckedIn) {
-    ringInner = '<path class="ring-check" d="M 60 92 L 80 112 L 122 70" stroke="#0B5E9E" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"/>';
+    ringInner = '<path class="ring-check" d="M 60 92 L 80 112 L 122 70" style="stroke:var(--ob-pink)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"/>';
   } else if (isRest) {
-    ringInner = '<text x="90" y="86" text-anchor="middle" font-family="Figtree, sans-serif" font-size="14" font-weight="600" fill="#6B7280">REST</text><text x="90" y="108" text-anchor="middle" font-family="Figtree, sans-serif" font-size="17" font-weight="700" fill="#0F2D5E">DAY</text>';
+    ringInner = '<text x="90" y="86" text-anchor="middle" font-family="Figtree, sans-serif" font-size="14" font-weight="600" style="fill:var(--ob-body)">REST</text><text x="90" y="108" text-anchor="middle" font-family="Figtree, sans-serif" font-size="17" font-weight="700" style="fill:var(--ob-head)">DAY</text>';
   } else {
-    ringInner = '<text x="90" y="86" text-anchor="middle" font-family="Figtree, sans-serif" font-size="14" font-weight="600" fill="#6B7280">TAP TO</text><text x="90" y="108" text-anchor="middle" font-family="Figtree, sans-serif" font-size="17" font-weight="700" fill="#0F2D5E">COMPLETE</text>';
+    ringInner = '<text x="90" y="86" text-anchor="middle" font-family="Figtree, sans-serif" font-size="14" font-weight="600" style="fill:var(--ob-body)">TAP TO</text><text x="90" y="108" text-anchor="middle" font-family="Figtree, sans-serif" font-size="17" font-weight="700" style="fill:var(--ob-head)">COMPLETE</text>';
   }
 
   var statusHeading = isCheckedIn ? 'Ritual complete today' : (isRest ? t.restDayTaken : 'Daily status');
@@ -1964,8 +1985,8 @@ function renderCheckinSection(container) {
         '<div class="card text-center" style="padding:28px 20px;">' +
           '<div class="ring-container mb-16" style="display:flex;justify-content:center;">' +
             '<svg class="checkin-ring' + (isCheckedIn ? ' done pulse' : '') + '" width="140" height="140" viewBox="0 0 180 180" id="ring-btn" role="button" tabindex="0" aria-pressed="' + isCheckedIn + '" aria-label="Toggle today\'s check-in" style="cursor:pointer;">' +
-              '<circle cx="90" cy="90" r="76" stroke="#E6F2FC" stroke-width="12" fill="none"/>' +
-              '<circle class="ring-track" cx="90" cy="90" r="76" stroke="' + ringColor + '" stroke-width="12" fill="none" stroke-linecap="round" stroke-dasharray="477.5" stroke-dashoffset="' + (ringFull ? '0' : '477.5') + '" style="transition:stroke-dashoffset 0.6s var(--ease-out);"/>' +
+              '<circle cx="90" cy="90" r="76" style="stroke:var(--ob-hair)" stroke-width="12" fill="none"/>' +
+              '<circle class="ring-track" cx="90" cy="90" r="76" style="stroke:' + ringColor + ';transition:stroke-dashoffset 0.6s var(--ease-out);" stroke-width="12" fill="none" stroke-linecap="round" stroke-dasharray="477.5" stroke-dashoffset="' + (ringFull ? '0' : '477.5') + '"/>' +
               ringInner +
             '</svg>' +
           '</div>' +
@@ -1998,7 +2019,7 @@ function renderCheckinSection(container) {
     Storage.save(p);
     renderCheckinSection(container);
     refreshPrimaryCard();
-    refreshSections(['results', 'nextstep']);
+    refreshSections(['bodymap', 'results', 'nextstep']);
     if (focusSel) {
       var f = container.querySelector(focusSel);
       if (f && f.focus) f.focus();
@@ -2398,7 +2419,7 @@ function renderMindSection(container) {
             '<span id="breathing-label" style="font-weight:700;">Tap to start</span>' +
           '</div>' +
         '</div>' +
-        '<p style="font-size:0.84rem;color:#0B5E9E;margin-top:14px;font-weight:600;text-align:center;">Tap circle to start / pause</p>' +
+        '<p class="breathing-hint" id="breathing-hint">Tap circle to start / pause</p>' +
       '</div>' +
 
       // 2. Daily mindset (tap to shuffle)
@@ -2458,69 +2479,83 @@ function renderMindSection(container) {
     });
   }
 
-  // Breathing pacer controller
+  // Breathing pacer controller: 5 rounds of in 4s / hold 4s / out 4s = 60 seconds.
   var isBreathingActive = false;
   var breathTimer = null;
+  var tickTimer = null;
+  var secondsLeft = 60;
+  var phaseIdx = 0;
   var coreEl = container.querySelector('#breathing-core');
   var labelEl = container.querySelector('#breathing-label');
-  var btnBreathing = document.getElementById('btn-toggle-breathing');
+  var hintEl = container.querySelector('#breathing-hint');
+  var PHASES = [
+    { cls: 'inhaling', text: mind.breathing.inhale || 'Breathe in' },
+    { cls: 'holding', text: mind.breathing.hold || 'Hold' },
+    { cls: 'exhaling', text: mind.breathing.exhale || 'Breathe out' }
+  ];
+
+  function setHint() {
+    if (!hintEl) return;
+    hintEl.textContent = isBreathingActive
+      ? secondsLeft + 's left · tap circle to pause'
+      : (secondsLeft < 60 && secondsLeft > 0 ? 'Paused at ' + secondsLeft + 's · tap circle to resume' : 'Tap circle to start / pause');
+  }
+
+  function stopTimers() {
+    clearTimeout(breathTimer); breathTimer = null;
+    clearInterval(tickTimer); tickTimer = null;
+  }
+
+  function finish() {
+    isBreathingActive = false;
+    stopTimers();
+    secondsLeft = 60; phaseIdx = 0;
+    if (coreEl) { coreEl.className = 'breathing-circle-core'; coreEl.setAttribute('aria-pressed', 'false'); }
+    if (labelEl) labelEl.textContent = 'Well done';
+    if (hintEl) hintEl.textContent = '60 seconds complete · tap to go again';
+  }
+
+  function runPhase() {
+    if (!isBreathingActive || !document.body.contains(coreEl)) { isBreathingActive = false; stopTimers(); return; }
+    var ph = PHASES[phaseIdx % 3];
+    labelEl.textContent = ph.text;
+    // Restart the CSS animation even when the class repeats.
+    coreEl.className = 'breathing-circle-core';
+    void coreEl.offsetWidth;
+    coreEl.className = 'breathing-circle-core is-running ' + ph.cls;
+    breathTimer = setTimeout(function () {
+      phaseIdx++;
+      if (secondsLeft <= 0) { finish(); return; }
+      runPhase();
+    }, 4000);
+  }
 
   function toggleBreathing() {
     isBreathingActive = !isBreathingActive;
+    if (coreEl) coreEl.setAttribute('aria-pressed', String(isBreathingActive));
     if (isBreathingActive) {
-      if (btnBreathing) btnBreathing.textContent = mind.breathing.btnPause;
-      runBreathCycle();
+      if (secondsLeft <= 0) secondsLeft = 60;
+      tickTimer = setInterval(function () {
+        if (!document.body.contains(coreEl)) { isBreathingActive = false; stopTimers(); return; }
+        secondsLeft = Math.max(0, secondsLeft - 1);
+        setHint();
+      }, 1000);
+      runPhase();
     } else {
-      clearTimeout(breathTimer);
-      if (btnBreathing) btnBreathing.textContent = mind.breathing.btnStart;
+      stopTimers();
       if (coreEl) coreEl.className = 'breathing-circle-core';
-      if (labelEl) labelEl.textContent = 'Tap to start';
+      if (labelEl) labelEl.textContent = 'Paused';
     }
+    setHint();
   }
 
   if (coreEl) {
+    coreEl.setAttribute('aria-pressed', 'false');
     coreEl.addEventListener('click', toggleBreathing);
     coreEl.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         toggleBreathing();
-      }
-    });
-  }
-
-  function runBreathCycle() {
-    if (!isBreathingActive || !document.body.contains(coreEl)) { isBreathingActive = false; return; }
-    labelEl.textContent = mind.breathing.inhale;
-    coreEl.className = 'breathing-circle-core inhaling';
-    
-    breathTimer = setTimeout(function () {
-      if (!isBreathingActive) return;
-      labelEl.textContent = mind.breathing.hold;
-      coreEl.className = 'breathing-circle-core holding';
-
-      breathTimer = setTimeout(function () {
-        if (!isBreathingActive) return;
-        labelEl.textContent = mind.breathing.exhale;
-        coreEl.className = 'breathing-circle-core exhaling';
-
-        breathTimer = setTimeout(function () {
-          if (isBreathingActive) runBreathCycle();
-        }, 4000);
-      }, 4000);
-    }, 4000);
-  }
-
-  if (btnBreathing) {
-    btnBreathing.addEventListener('click', function () {
-      isBreathingActive = !isBreathingActive;
-      if (isBreathingActive) {
-        btnBreathing.textContent = mind.breathing.btnPause;
-        runBreathCycle();
-      } else {
-        clearTimeout(breathTimer);
-        btnBreathing.textContent = mind.breathing.btnStart;
-        coreEl.className = 'breathing-circle-core';
-        labelEl.textContent = 'Paused';
       }
     });
   }
@@ -2572,6 +2607,48 @@ function renderResultsSection(container) {
   var reviewDue = Utils.isWeeklyRatingDue(profile);
   var weekLabel = currentWk > cfg.fullWindowWeeks ? 'Week ' + currentWk : 'Week ' + currentWk + ' of ' + cfg.fullWindowWeeks;
 
+  // Timeline fill: week 1 starts at 0%, the last week of the window at 100%.
+  var daysElapsed = Math.max(0, Utils.daysBetween(profile.startDate, Utils.getToday()));
+  var spanWeeks = Math.max(1, cfg.fullWindowWeeks - 1);
+  function weekPos(w) { return Math.max(0, Math.min(100, (w - 1) / spanWeeks * 100)); }
+  var fillPct = Math.max(0, Math.min(100, (daysElapsed / 7) / spanWeeks * 100));
+  var horizonHTML = '<div class="results-horizon" aria-label="Week ' + currentWk + ' of ' + cfg.fullWindowWeeks + '">' +
+      '<div class="results-horizon-track">' +
+        '<div class="results-horizon-fill" style="width:' + fillPct.toFixed(1) + '%;"></div>' +
+        '<span class="results-horizon-tick" style="left:0%"></span>' +
+        '<span class="results-horizon-tick" style="left:' + weekPos(cfg.earlyWindowWeeks).toFixed(1) + '%"></span>' +
+        '<span class="results-horizon-tick" style="left:100%"></span>' +
+        '<span class="results-horizon-you" style="left:' + fillPct.toFixed(1) + '%" title="You are here: week ' + currentWk + '"></span>' +
+      '</div>' +
+      '<div class="results-horizon-labels">' +
+        '<span style="left:0%">Week 1</span>' +
+        '<span style="left:' + weekPos(cfg.earlyWindowWeeks).toFixed(1) + '%">Week ' + cfg.earlyWindowWeeks + ' (early shifts)</span>' +
+        '<span style="left:100%">Week ' + cfg.fullWindowWeeks + ' (real change)</span>' +
+      '</div>' +
+    '</div>';
+
+  var phaseName = currentWk < cfg.earlyWindowWeeks ? 'Adjusting phase' : (currentWk < cfg.earlyWindowWeeks + 4 ? 'Early signs phase' : 'Steadier phase');
+  var nowMs = getMilestoneForWeek(cfg, currentWk);
+  var toEarly = cfg.earlyWindowWeeks - currentWk;
+  var toFull = cfg.fullWindowWeeks - currentWk;
+  var nextLine = toEarly > 0
+    ? 'First visible shifts usually show from week ' + cfg.earlyWindowWeeks + ' — about ' + toEarly + (toEarly === 1 ? ' week' : ' weeks') + ' away.'
+    : (toFull > 0
+      ? 'You are in the early-shift window. Real change settles by week ' + cfg.fullWindowWeeks + ' — ' + toFull + (toFull === 1 ? ' week' : ' weeks') + ' to go.'
+      : 'You have completed the full ' + cfg.fullWindowWeeks + '-week window. Compare your reviews to judge the routine.');
+  var whereYouAreHTML =
+    '<div class="wya-grid">' +
+      '<div class="wya-stat"><span class="wya-num">' + currentWk + '</span><span class="wya-lbl">of ' + cfg.fullWindowWeeks + ' weeks</span></div>' +
+      '<div class="wya-stat"><span class="wya-num">' + (daysElapsed + 1) + '</span><span class="wya-lbl">days in</span></div>' +
+      '<div class="wya-stat"><span class="wya-num">' + con.done + '</span><span class="wya-lbl">days logged (28d)</span></div>' +
+      '<div class="wya-stat"><span class="wya-num">' + ratings.length + '</span><span class="wya-lbl">weekly reviews</span></div>' +
+    '</div>' +
+    '<p class="wya-line"><strong>' + escHTML(phaseName) + ':</strong> ' + escHTML(nowMs.title || '') + '. ' + escHTML(nowMs.beneath || '') + '</p>' +
+    '<p class="wya-line">' + escHTML(nextLine) + '</p>' +
+    '<p class="wya-line">' + (ratings.length < 2
+      ? 'Your verdict unlocks after two weekly reviews (' + ratings.length + ' of 2 done).'
+      : 'Your verdict compares your latest review with your starting point.') + '</p>';
+
   // Dial calculations (radius = 38, circumference = 238.76)
   var circ = 238.76;
   var dashoffset = circ - (circ * (consistencyPct / 100));
@@ -2584,7 +2661,7 @@ function renderResultsSection(container) {
 
     '<div class="results-bento-grid">' +
       // Card 1: 28-day consistency dial
-      '<div class="results-bento-card results-bento-span-5">' +
+      '<div class="results-bento-card results-bento-span-5 results-consistency-card">' +
         '<div class="badge badge-blue mb-12">Consistency</div>' +
         '<div class="results-score-dial-wrap">' +
           '<svg class="results-score-dial-svg" viewBox="0 0 100 100" aria-hidden="true">' +
@@ -2592,8 +2669,8 @@ function renderResultsSection(container) {
             '<circle class="results-score-dial-val" cx="50" cy="50" r="38" stroke-dasharray="' + circ + '" stroke-dashoffset="' + dashoffset + '" />' +
           '</svg>' +
           '<div>' +
-            '<div style="font-size:2rem;font-weight:800;color:#0F2D5E;line-height:1;">' + consistencyPct + '%</div>' +
-            '<div style="font-size:0.86rem;color:#64748B;margin-top:4px;">' + escHTML(CONTENT.rings.consistency) + '</div>' +
+            '<div class="results-big-num">' + consistencyPct + '%</div>' +
+            '<div class="results-big-sub">' + escHTML(CONTENT.rings.consistency) + '</div>' +
             '<div style="margin-top:8px;">' +
               '<span class="results-delta-pill ' + (consistencyPct >= 70 ? 'positive' : 'neutral') + '">' +
                 (consistencyPct >= 70 ? '&#9650; Steady pace' : '&#9644; Building momentum') +
@@ -2601,29 +2678,25 @@ function renderResultsSection(container) {
             '</div>' +
           '</div>' +
         '</div>' +
-        '<div style="margin-top:18px;padding-top:14px;border-top:1px solid #E2E8F0;display:flex;justify-content:space-between;font-size:0.86rem;">' +
-          '<span style="color:#64748B;">Current streak:</span>' +
-          '<strong style="color:#0B5E9E;">' + streakDays + (streakDays === 1 ? ' day' : ' days') + '</strong>' +
+        '<div class="results-streak-row">' +
+          '<span>Current streak:</span>' +
+          '<strong>' + streakDays + (streakDays === 1 ? ' day' : ' days') + '</strong>' +
         '</div>' +
       '</div>' +
 
       // Card 2: verdict
-      '<div class="results-bento-card results-bento-span-7 ' + escHTML(verdict.cssClass) + '">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
-          '<div class="badge mb-0" style="background:#FFFFFF;font-weight:700;">' + escHTML(verdict.label) + '</div>' +
-          '<span style="font-size:0.82rem;font-weight:600;color:#0B5E9E;">Where you are</span>' +
+      '<div class="results-bento-card results-bento-span-7 results-verdict-card ' + escHTML(verdict.cssClass) + '">' +
+        '<div class="results-verdict-head">' +
+          '<h3 class="card-title" style="font-size:1.2rem;margin:0;">' + escHTML(verdict.label) + '</h3>' +
+          '<button type="button" class="where-you-are-btn" id="btn-where-you-are" aria-expanded="false" aria-controls="where-you-are-panel">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>' +
+            '<span>Where you are</span>' +
+          '</button>' +
         '</div>' +
-        '<h3 class="card-title" style="font-size:1.2rem;margin-bottom:6px;">' + escHTML(verdict.label) + '</h3>' +
-        '<p class="card-text mb-12" style="font-size:0.92rem;line-height:1.5;">' + escHTML(verdict.message) + '</p>' +
-        '<div class="results-horizon-track">' +
-          '<div class="results-horizon-fill" style="width:' + Math.min(100, Math.round((currentWk / cfg.fullWindowWeeks) * 100)) + '%;"></div>' +
-        '</div>' +
-        '<div style="display:flex;justify-content:space-between;font-size:0.78rem;color:#64748B;margin-bottom:12px;">' +
-          '<span>Week 1</span>' +
-          '<span>Week ' + cfg.earlyWindowWeeks + ' (early shifts)</span>' +
-          '<span>Week ' + cfg.fullWindowWeeks + ' (real change)</span>' +
-        '</div>' +
-        '<ul style="margin:0;padding-left:18px;font-size:0.85rem;color:#475569;">' +
+        '<p class="card-text mb-12" style="font-size:0.92rem;line-height:1.5;margin-top:6px;">' + escHTML(verdict.message) + '</p>' +
+        '<div class="where-you-are-panel" id="where-you-are-panel" hidden>' + whereYouAreHTML + '</div>' +
+        horizonHTML +
+        '<ul class="results-reasons">' +
           verdict.reasons.map(function (r) { return '<li>' + escHTML(r) + '</li>'; }).join('') +
         '</ul>' +
       '</div>' +
@@ -2633,34 +2706,39 @@ function renderResultsSection(container) {
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">' +
           '<div>' +
             '<h3 class="card-title" style="font-size:1.1rem;margin-bottom:2px;">Markers to watch</h3>' +
-            '<p class="card-text" style="font-size:0.86rem;color:#64748B;">Physical signs you can check each week for ' + escHTML(cfg.label) + ' care</p>' +
+            '<p class="card-text results-muted" style="font-size:0.86rem;">Tap a marker to record it for week ' + currentWk + '</p>' +
           '</div>' +
           '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
             '<button type="button" class="btn btn-secondary btn-sm" id="btn-open-recap">Week recap</button>' +
             '<button type="button" class="btn btn-primary btn-sm" id="btn-log-micromarkers">' +
-              (reviewDue ? 'Weekly review due' : 'Record weekly review') + ' &rarr;' +
+              (reviewDue ? 'Full weekly review' : 'Update weekly review') + ' &rarr;' +
             '</button>' +
           '</div>' +
         '</div>' +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;">';
+        '<div class="marker-btn-grid">';
 
+  var thisWeekEntry = ratings.filter(function (r) { return r.week === currentWk; })[0] || null;
   markersList.forEach(function (m) {
-    html += '<div class="results-matrix-row">' +
-      '<div style="flex:1;">' +
-        '<div style="font-weight:700;color:#0F2D5E;font-size:0.92rem;">' + escHTML(m.name) + '</div>' +
-        '<div style="font-size:0.8rem;color:#64748B;margin-top:2px;">' + escHTML(m.hint) + '</div>' +
-      '</div>' +
-    '</div>';
+    var rec = thisWeekEntry && thisWeekEntry.markers ? thisWeekEntry.markers[m.id] : undefined;
+    var recOpt = null;
+    if (rec !== undefined) recOpt = (m.options || []).filter(function (o) { return o.score === rec; })[0] || null;
+    html += '<button type="button" class="marker-btn' + (recOpt ? ' is-recorded' : '') + '" data-marker-id="' + escHTML(m.id) + '">' +
+      '<span class="marker-btn-main">' +
+        '<span class="marker-btn-name">' + escHTML(m.name) + '</span>' +
+        '<span class="marker-btn-hint">' + escHTML(m.hint) + '</span>' +
+      '</span>' +
+      '<span class="marker-btn-status">' + (recOpt ? ICONS.check + ' ' + escHTML(recOpt.label) : 'Record &rarr;') + '</span>' +
+    '</button>';
   });
 
   html += '</div>';
 
-  html += '<div class="review-history" style="margin-top:18px;padding-top:14px;border-top:1px solid #E2E8F0;">' +
-    '<h4 style="font-size:0.95rem;font-weight:700;color:#0F2D5E;margin-bottom:8px;">Your weekly reviews</h4>';
+  html += '<div class="review-history" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--ob-hair);">' +
+    '<h4 style="font-size:0.95rem;font-weight:700;color:var(--ob-head);margin-bottom:8px;">Your weekly reviews</h4>';
   if (ratings.length) {
-    html += '<ul style="margin:0;padding-left:18px;font-size:0.86rem;color:#475569;">';
+    html += '<ul style="margin:0;padding-left:18px;font-size:0.86rem;color:var(--ob-body);">';
     ratings.forEach(function (r) {
-      html += '<li>Week ' + r.week + ': marker ' + r.primary + '/5, overall ' + r.secondary + '/5' + (r.unusual ? ' (flagged something unusual)' : '') + '</li>';
+      html += '<li>Week ' + r.week + ': marker ' + r.primary + '/5' + (r.secondary && !r.secondaryAssumed ? ', overall ' + r.secondary + '/5' : '') + (r.unusual ? ' (flagged something unusual)' : '') + '</li>';
     });
     html += '</ul>';
   } else {
@@ -2677,9 +2755,9 @@ function renderResultsSection(container) {
           (profile.products || []).map(function (prod) {
             var daysLeft = Utils.getDaysLeft(prod);
             var statusStr = (daysLeft !== null) ? (daysLeft > 0 ? (daysLeft + ' days left') : 'Refill due') : '30-day cycle';
-            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#F8FAFC;border-radius:10px;border:1px solid #E2E8F0;font-size:0.86rem;">' +
-              '<span style="font-weight:600;color:#0F172A;">' + escHTML(prod.name) + '</span>' +
-              '<span style="font-weight:700;color:#0B5E9E;">' + statusStr + '</span>' +
+            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--ob-glass-hi);border-radius:10px;border:1px solid var(--ob-hair);font-size:0.86rem;">' +
+              '<span style="font-weight:600;color:var(--ob-head);">' + escHTML(prod.name) + '</span>' +
+              '<span style="font-weight:700;color:var(--ob-pink);">' + statusStr + '</span>' +
             '</div>';
           }).join('') +
         '</div>' +
@@ -2692,12 +2770,12 @@ function renderResultsSection(container) {
       '<div class="results-bento-card results-bento-span-6">' +
         '<div class="badge badge-blue mb-10">Good to know</div>' +
         '<h3 class="card-title" style="font-size:1.05rem;margin-bottom:6px;">Quiet, compounding care</h3>' +
-        '<p class="card-text mb-12" style="font-size:0.88rem;color:#475569;line-height:1.5;">' +
+        '<p class="card-text mb-12" style="font-size:0.88rem;color:var(--ob-body);line-height:1.5;">' +
           'Surface changes follow weeks of work under the skin and scalp. Daily care adds up before the mirror shows it.' +
         '</p>' +
-        '<div style="background:#EFF6FF;padding:12px 14px;border-radius:12px;border:1px solid #BFDBFE;">' +
-          '<div style="font-weight:700;color:#1E40AF;font-size:0.84rem;margin-bottom:2px;">Tip for week ' + currentWk + '</div>' +
-          '<div style="font-size:0.82rem;color:#1E3A8A;">Judge a routine over several weeks of steady use, not a few days.</div>' +
+        '<div style="background:var(--ob-glass-hi);padding:12px 14px;border-radius:12px;border:1px solid var(--ob-hair);">' +
+          '<div style="font-weight:700;color:var(--ob-pink);font-size:0.84rem;margin-bottom:2px;">Tip for week ' + currentWk + '</div>' +
+          '<div style="font-size:0.82rem;color:var(--ob-pink);">Judge a routine over several weeks of steady use, not a few days.</div>' +
         '</div>' +
       '</div>' +
 
@@ -2709,6 +2787,19 @@ function renderResultsSection(container) {
 
   var logBtn = container.querySelector('#btn-log-micromarkers');
   if (logBtn) logBtn.addEventListener('click', function () { openWeeklyReviewDrawer(); });
+  container.querySelectorAll('[data-marker-id]').forEach(function (btn) {
+    btn.addEventListener('click', function () { openMarkerDrawer(btn.getAttribute('data-marker-id')); });
+  });
+  var wyaBtn = container.querySelector('#btn-where-you-are');
+  var wyaPanel = container.querySelector('#where-you-are-panel');
+  if (wyaBtn && wyaPanel) {
+    wyaBtn.addEventListener('click', function () {
+      var open = wyaPanel.hidden;
+      wyaPanel.hidden = !open;
+      wyaBtn.setAttribute('aria-expanded', String(open));
+      wyaBtn.classList.toggle('is-open', open);
+    });
+  }
   var recapBtn = container.querySelector('#btn-open-recap');
   if (recapBtn) recapBtn.addEventListener('click', function () { openRecapDrawer(); });
 }
@@ -2739,7 +2830,7 @@ function renderNextStepSection(container) {
               'Used ' + burnRate.usedDoses + ' of ' + burnRate.totalDoses + ' doses (' + burnRate.remainingDoses + ' remaining)' +
             '</p>' +
           '</div>' +
-          (burnRate.isLow ? '<span class="badge" style="background:#FEF2F2;color:#991B1B;font-weight:700;">Reorder soon</span>' : '<span class="badge badge-blue">Stock healthy</span>') +
+          (burnRate.isLow ? '<span class="badge" style="background:var(--danger-bg);color:var(--danger-text);font-weight:700;">Reorder soon</span>' : '<span class="badge badge-blue">Stock healthy</span>') +
         '</div>' +
         '<div class="burn-rate-meter" role="img" aria-label="' + burnRate.pctUsed + ' percent used">' +
           '<div class="burn-rate-fill" style="width:' + burnRate.pctUsed + '%;"></div>' +
@@ -2940,7 +3031,7 @@ function openChatbotDrawer(initialTopicId) {
 
             '<div class="answer-card answer-science">' +
               '<div class="answer-card-header">' +
-                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0B5E9E" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="stroke:var(--ob-pink)" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>' +
                 '<span>The Science (Biology)</span>' +
               '</div>' +
               '<p class="answer-card-text">' + scienceHtml + '</p>' +
@@ -3021,8 +3112,10 @@ function openWeeklyReviewDrawer() {
       '<label style="font-weight:700;color:var(--deep-navy);">' + escHTML(m.name) + '</label>' +
       '<p class="muted mb-8" style="font-size:0.82rem;">' + escHTML(m.hint) + '</p>' +
       '<div class="chip-group" data-marker-field="' + escHTML(m.id) + '" role="radiogroup" aria-label="' + escHTML(m.name) + '">';
+    var prevScore = existing && existing.markers ? existing.markers[m.id] : undefined;
     m.options.forEach(function (opt) {
-      html += '<button type="button" class="chip" role="radio" aria-checked="false" data-score="' + opt.score + '">' + escHTML(opt.label) + '</button>';
+      var on = prevScore === opt.score;
+      html += '<button type="button" class="chip' + (on ? ' selected' : '') + '" role="radio" aria-checked="' + on + '" data-score="' + opt.score + '">' + escHTML(opt.label) + '</button>';
     });
     html += '</div></div>';
   });
@@ -3046,6 +3139,7 @@ function openWeeklyReviewDrawer() {
     var secondaryRating = existing ? existing.secondary : 0;
     var unusual = existing ? existing.unusual : null;
     var picked = {};
+    if (existing && existing.markers) Object.keys(existing.markers).forEach(function (k) { picked[k] = existing.markers[k]; });
 
     function currentPrimary() {
       if (!markersList.length) return primaryRating;
@@ -3096,7 +3190,7 @@ function openWeeklyReviewDrawer() {
       var fresh = Storage.load();
       if (!fresh) return;
       var list = fresh.weeklyRatings || [];
-      var entry = { week: currentWk, date: Utils.getToday(), primary: primary, secondary: secondaryRating, unusual: unusual };
+      var entry = { week: currentWk, date: Utils.getToday(), primary: primary, secondary: secondaryRating, unusual: unusual, markers: picked };
 
       // The first real review replaces the neutral placeholder starting point.
       if (fresh.baseline && fresh.baseline.assumed && !list.length) {
@@ -3112,6 +3206,84 @@ function openWeeklyReviewDrawer() {
       refreshSections(['results', 'nextstep']);
       refreshPrimaryCard();
       UI.toast('Weekly review saved. Verdict updated.');
+    });
+  });
+}
+
+/* ---- Single marker drawer (tap a marker card in Results) ---- */
+function openMarkerDrawer(markerId) {
+  var profile = Storage.load();
+  if (!profile) return;
+  var currentWk = Utils.getWeekNumber(profile.startDate);
+  var markersList = (CONTENT.microMarkers && CONTENT.microMarkers[profile.concern]) || [];
+  var m = markersList.filter(function (x) { return x.id === markerId; })[0];
+  if (!m) { openWeeklyReviewDrawer(); return; }
+  var existing = (profile.weeklyRatings || []).filter(function (r) { return r.week === currentWk; })[0] || null;
+  var prevScore = existing && existing.markers ? existing.markers[m.id] : undefined;
+
+  var html = '<form id="marker-form" novalidate>' +
+    '<p class="card-text mb-8" style="font-size:0.92rem;">' + escHTML(m.hint) + '</p>' +
+    '<p class="muted mb-16" style="font-size:0.84rem;">What did you notice this week (week ' + currentWk + ')?</p>' +
+    '<div class="chip-group marker-choice-group" role="radiogroup" aria-label="' + escHTML(m.name) + '">';
+  m.options.forEach(function (opt) {
+    var on = prevScore === opt.score;
+    html += '<button type="button" class="chip' + (on ? ' selected' : '') + '" role="radio" aria-checked="' + on + '" data-score="' + opt.score + '">' + escHTML(opt.label) + '</button>';
+  });
+  html += '</div>' +
+    '<div class="field mt-16"><label id="marker-unusual-label">Anything unusual or worrying?</label>' +
+      '<div class="chip-group" id="marker-unusual" role="radiogroup" aria-labelledby="marker-unusual-label">' +
+        '<button type="button" class="chip' + (existing && existing.unusual === true ? ' selected' : '') + '" role="radio" data-value="yes">Yes</button>' +
+        '<button type="button" class="chip' + (!existing || existing.unusual !== true ? ' selected' : '') + '" role="radio" data-value="no">No</button>' +
+      '</div></div>' +
+    '<button type="submit" class="btn btn-primary btn-full mt-16" id="save-marker"' + (prevScore === undefined ? ' disabled' : '') + '>Save review</button>' +
+  '</form>';
+
+  Drawer.open(m.name + ' · Week ' + currentWk, html, function (panelEl) {
+    var score = prevScore;
+    var unusual = existing ? existing.unusual === true : false;
+    var saveBtn = panelEl.querySelector('#save-marker');
+    panelEl.querySelectorAll('.marker-choice-group .chip').forEach(function (c) {
+      c.addEventListener('click', function () {
+        panelEl.querySelectorAll('.marker-choice-group .chip').forEach(function (x) { x.classList.remove('selected'); x.setAttribute('aria-checked', 'false'); });
+        c.classList.add('selected'); c.setAttribute('aria-checked', 'true');
+        score = Number(c.getAttribute('data-score'));
+        if (saveBtn) saveBtn.disabled = false;
+      });
+    });
+    panelEl.querySelectorAll('#marker-unusual .chip').forEach(function (c) {
+      c.addEventListener('click', function () {
+        panelEl.querySelectorAll('#marker-unusual .chip').forEach(function (x) { x.classList.remove('selected'); });
+        c.classList.add('selected');
+        unusual = c.getAttribute('data-value') === 'yes';
+      });
+    });
+    var form = panelEl.querySelector('#marker-form');
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (score === undefined) return;
+      var fresh = Storage.load();
+      if (!fresh) return;
+      var list = fresh.weeklyRatings || [];
+      var idx = list.findIndex(function (r) { return r.week === currentWk; });
+      var entry = idx >= 0 ? list[idx] : { week: currentWk, date: Utils.getToday(), secondary: 0, unusual: false, markers: {} };
+      entry.markers = entry.markers || {};
+      entry.markers[m.id] = score;
+      entry.date = Utils.getToday();
+      entry.unusual = unusual;
+      var vals = Object.keys(entry.markers).map(function (k) { return entry.markers[k]; });
+      entry.primary = Math.max(1, Math.min(5, Math.round(vals.reduce(function (a, b) { return a + b; }, 0) / vals.length)));
+      if (!entry.secondary || entry.secondaryAssumed) { entry.secondary = entry.primary; entry.secondaryAssumed = true; }
+      if (fresh.baseline && fresh.baseline.assumed && !(list.length - (idx >= 0 ? 1 : 0))) {
+        fresh.baseline = { primary: entry.primary, secondary: entry.secondary, date: Utils.getToday(), note: '' };
+      }
+      if (idx >= 0) list[idx] = entry; else list.push(entry);
+      list.sort(function (a, b) { return a.week - b.week; });
+      fresh.weeklyRatings = list;
+      Storage.save(fresh);
+      Drawer.close();
+      refreshSections(['results', 'nextstep']);
+      refreshPrimaryCard();
+      UI.toast(m.name + ' saved for week ' + currentWk);
     });
   });
 }
@@ -3391,9 +3563,9 @@ function openSettingsDrawer() {
     '</div>' +
   '</div>' +
 
-  '<div class="card mb-16" style="border:1.5px solid #FCA5A5;background:#FFF5F5;">' +
-    '<h3 class="card-title" style="font-size:1rem;color:#991B1B;margin-bottom:6px;">Start fresh</h3>' +
-    '<p class="card-text mb-12" style="font-size:0.86rem;color:#7F1D1D;">' +
+  '<div class="card mb-16 danger-card" style="border:1.5px solid var(--danger-border);">' +
+    '<h3 class="card-title" style="font-size:1rem;color:var(--danger-text);margin-bottom:6px;">Start fresh</h3>' +
+    '<p class="card-text mb-12" style="font-size:0.86rem;color:var(--ob-body);">' +
       'Clear your current routine and begin again as a new visitor.' +
     '</p>' +
     '<div id="reset-action-area">' +
@@ -3478,8 +3650,8 @@ function openSettingsDrawer() {
     var resetArea = panelEl.querySelector('#reset-action-area');
     if (triggerResetBtn && resetArea) {
       triggerResetBtn.addEventListener('click', function () {
-        resetArea.innerHTML = '<div style="background:#FFFFFF;border:1px solid #EF4444;border-radius:8px;padding:12px;margin-top:6px;">' +
-          '<p style="font-size:0.84rem;font-weight:600;color:#991B1B;margin-bottom:10px;">This permanently deletes your routine and history. Continue?</p>' +
+        resetArea.innerHTML = '<div style="background:var(--ob-glass-hi);border:1px solid var(--danger-border);border-radius:8px;padding:12px;margin-top:6px;">' +
+          '<p style="font-size:0.84rem;font-weight:600;color:var(--danger-text);margin-bottom:10px;">This permanently deletes your routine and history. Continue?</p>' +
           '<div style="display:flex;gap:8px;">' +
             '<button type="button" class="btn btn-sm" id="btn-confirm-reset" style="background:#DC2626;color:#FFFFFF;border:none;">Yes, clear all data</button>' +
             '<button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-reset">Cancel</button>' +
@@ -3822,9 +3994,9 @@ function initIntroAnimation() {
         '<div style="display:flex;flex-direction:column;gap:8px;width:100%;text-align:left;max-height:200px;overflow-y:auto;padding:2px;">' +
           catalog.map(function (p) {
             var isChk = (beeState.ownedProducts.indexOf(p.id) >= 0);
-            return '<div class="shelf-product-item' + (isChk ? ' selected focus-ring-active' : '') + '" data-prod-id="' + p.id + '" style="cursor:pointer;padding:10px 14px;background:#F8FAFC;border:1.5px solid ' + (isChk ? '#0B5E9E' : '#E2E8F0') + ';border-radius:12px;display:flex;align-items:center;gap:10px;">' +
-              '<div class="shelf-checkbox" style="width:20px;height:20px;border-radius:6px;border:1.5px solid ' + (isChk ? '#0B5E9E' : '#CBD5E1') + ';background:' + (isChk ? '#0B5E9E' : '#FFFFFF') + ';display:flex;align-items:center;justify-content:center;color:#FFFFFF;">' + (isChk ? ICONS.check : '') + '</div>' +
-              '<span style="font-size:0.9rem;font-weight:600;color:#0F2D5E;">' + escHTML(p.name) + '</span>' +
+            return '<div class="shelf-product-item bee-shelf-item' + (isChk ? ' selected' : '') + '" data-prod-id="' + p.id + '" role="checkbox" aria-checked="' + isChk + '" tabindex="0">' +
+              '<div class="shelf-checkbox">' + (isChk ? ICONS.check : '') + '</div>' +
+              '<span class="bee-shelf-name">' + escHTML(p.name) + '</span>' +
             '</div>';
           }).join('') +
         '</div>' +
@@ -3848,13 +4020,13 @@ function initIntroAnimation() {
           '<p class="bee-greeting-sub">Realistic routines build quiet daily momentum.</p>' +
         '</div>' +
         '<div style="width:100%;text-align:left;">' +
-          '<div style="font-size:0.85rem;font-weight:700;color:#0F2D5E;margin-bottom:8px;">Preferred daily time:</div>' +
+          '<div style="font-size:0.85rem;font-weight:700;color:var(--ob-head);margin-bottom:8px;">Preferred daily time:</div>' +
           '<div class="chip-group mb-16" style="display:flex;gap:8px;">' +
             '<button type="button" class="chip' + (beeState.routineTime === 'morning' ? ' selected focus-ring-active' : '') + '" data-time="morning">Morning only</button>' +
             '<button type="button" class="chip' + (beeState.routineTime === 'night' ? ' selected focus-ring-active' : '') + '" data-time="night">Night only</button>' +
             '<button type="button" class="chip' + (beeState.routineTime === 'both' ? ' selected focus-ring-active' : '') + '" data-time="both">Both AM & PM</button>' +
           '</div>' +
-          '<div style="font-size:0.85rem;font-weight:700;color:#0F2D5E;margin-bottom:8px;">When did you start:</div>' +
+          '<div style="font-size:0.85rem;font-weight:700;color:var(--ob-head);margin-bottom:8px;">When did you start:</div>' +
           '<div class="chip-group" style="display:flex;gap:8px;">' +
             '<button type="button" class="chip' + (beeState.startBucket === 'notYet' ? ' selected focus-ring-active' : '') + '" data-bucket="notYet">Starting today</button>' +
             '<button type="button" class="chip' + (beeState.startBucket === 'under1m' ? ' selected focus-ring-active' : '') + '" data-bucket="under1m">Past 2 weeks</button>' +
@@ -3869,10 +4041,10 @@ function initIntroAnimation() {
     } else if (step === 4) {
       // Step 4: Celebration & Enter Companion
       stepHtml = '<div class="bee-character-card">' +
-        '<div class="bee-avatar-hero" style="width:96px;height:96px;border-color:#10B981;background:#ECFDF5;color:#047857;">' + (ICONS.guideHero || ICONS.guideAvatar) + '</div>' +
-        '<div class="bee-speech-bubble" style="background:#F0FDF4;border-color:#BBF7D0;">' +
-          '<h3 class="bee-greeting-title" style="color:#065F46;">Your routine is ready, ' + escHTML(beeState.name) + '!</h3>' +
-          '<p class="bee-greeting-sub" style="color:#047857;">Your personal companion is saved privately on your device. I\'ll be right beside you every step.</p>' +
+        '<div class="bee-avatar-hero" style="width:96px;height:96px;">' + (ICONS.guideHero || ICONS.guideAvatar) + '</div>' +
+        '<div class="bee-speech-bubble">' +
+          '<h3 class="bee-greeting-title">Your routine is ready, ' + escHTML(beeState.name) + '!</h3>' +
+          '<p class="bee-greeting-sub">Your personal companion is saved privately on your device. I\'ll be right beside you every step.</p>' +
         '</div>' +
         '<button type="button" class="btn btn-primary" id="bee-enter-app" style="width:100%;padding:14px 20px;font-size:1.05rem;">Enter My Companion &rarr;</button>' +
       '</div>';

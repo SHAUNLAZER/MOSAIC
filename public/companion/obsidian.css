@@ -155,16 +155,16 @@ input[type="range"] { accent-color: var(--ob-pink); }
   .card:hover, .btn:hover, .chip:hover { box-shadow: none !important; transform: none !important; }
 }
 /* Legacy inline presentation colors must follow the selected theme too. */
-[style*="color:#EDEDF0"], [style*="color: #EDEDF0"], [style*="color:#FFFFFF"], [style*="color: #FFFFFF"] { color: var(--ob-head) !important; }
-[style*="color:#8E92A4"], [style*="color:#64748B"] { color: var(--ob-body) !important; }
-[style*="color:#38BDF8"], [style*="color:#5EEAD4"], [style*="color:#A78BFA"] { color: var(--ob-pink) !important; }
-[style*="background:#0D0E15"], [style*="background:#11121A"] { background: var(--ob-glass-hi) !important; }
-[style*="background:#38BDF8"], .bee-step-dot.active { background: var(--ob-pink) !important; }
+[style*="color:var(--ob-head)"], [style*="color: var(--ob-head)"], [style*="color:#FFFFFF"], [style*="color: #FFFFFF"] { color: var(--ob-head) !important; }
+[style*="color:var(--ob-label)"], [style*="color:var(--ob-body)"] { color: var(--ob-body) !important; }
+[style*="color:var(--ob-pink)"], [style*="color:var(--ob-soft)"], [style*="color:var(--ob-soft)"] { color: var(--ob-pink) !important; }
+[style*="background:var(--ob-glass)"], [style*="background:var(--ob-glass)"] { background: var(--ob-glass-hi) !important; }
+[style*="background:var(--ob-pink)"], .bee-step-dot.active { background: var(--ob-pink) !important; }
 .shelf-checkbox { border-color: var(--ob-hair) !important; color: var(--ob-ink) !important; }
 .shelf-product-item.selected .shelf-checkbox { background: var(--ob-pink) !important; border-color: var(--ob-pink) !important; }
-svg [stroke="#38BDF8"], svg [stroke="#A78BFA"], svg [stroke="#5EEAD4"] { stroke: var(--ob-pink) !important; }
-svg [fill="#38BDF8"], svg [fill="#A78BFA"], svg [fill="#5EEAD4"] { fill: var(--ob-pink) !important; }
-svg stop[stop-color="#38BDF8"], svg stop[stop-color="#A78BFA"] { stop-color: var(--ob-pink); }
+svg [stroke="var(--ob-pink)"], svg [stroke="var(--ob-pink)"], svg [stroke="var(--ob-pink)"] { stroke: var(--ob-pink) !important; }
+svg [fill="var(--ob-pink)"], svg [fill="var(--ob-pink)"], svg [fill="var(--ob-pink)"] { fill: var(--ob-pink) !important; }
+svg stop[stop-color="var(--ob-pink)"], svg stop[stop-color="var(--ob-pink)"] { stop-color: var(--ob-pink); }
 svg stop[stop-color="#F59E0B"], svg stop[stop-color="#FB7185"] { stop-color: var(--ob-hot); }
 .theme-toggle.btn, input.bee-input-name { background: var(--ob-glass-hi) !important; color: var(--ob-head) !important; }
 
